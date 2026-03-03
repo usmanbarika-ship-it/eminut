@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
+import { getFirestore } from "firebase/firestore"; // Tambahkan ini
 
-// Konfigurasi menggunakan variabel lingkungan (Environment Variables) dari Vercel
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -12,10 +12,10 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Inisialisasi Firebase
 const app = initializeApp(firebaseConfig);
 
-// Inisialisasi Analytics hanya jika didukung (di lingkungan browser)
+// Ekspor db agar bisa digunakan di komponen lain
+export const db = getFirestore(app); 
 export const analytics = isSupported().then((yes) => (yes ? getAnalytics(app) : null));
 
 export default app;
