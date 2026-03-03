@@ -5,11 +5,17 @@ import {
   PlusCircle, LayoutDashboard, ListFilter, CheckCircle2, X, LogOut, LogIn 
 } from 'lucide-react';
 
-// Inisialisasi Firebase agar Analytics berjalan
+// Inisialisasi Firebase
 import './services/firebase'; 
+import { 
+  saveCaseToFirestore, 
+  getAllCases, 
+  findCaseByNumber, 
+  updateCaseInFirestore, 
+  deleteCaseFromFirestore 
+} from './services/databaseService';
 
 import { CaseData, CaseType, SearchParams } from './types';
-import { MOCK_CASES } from './constants';
 import CaseDetails from './components/CaseDetails';
 import Scanner from './components/Scanner';
 import AddCaseForm from './components/AddCaseForm';
@@ -22,11 +28,7 @@ const App: React.FC = () => {
   });
   const [showLoginModal, setShowLoginModal] = useState(false);
   
-  const [cases, setCases] = useState<CaseData[]>(() => {
-    const saved = localStorage.getItem('e_minutasi_cases');
-    return saved ? JSON.parse(saved) : MOCK_CASES;
-  });
-  
+  const [cases, setCases] = useState<CaseData[]>([]);
   const [view, setView] = useState<'search' | 'add' | 'list'>('search');
   const [params, setParams] = useState<SearchParams>({
     caseNumber: '',
@@ -40,10 +42,17 @@ const App: React.FC = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [showToast, setShowToast] = useState<{show: boolean, message: string}>({ show: false, message: '' });
 
-  // Sinkronisasi database lokal ke Storage
+  // Load data dari Firestore saat aplikasi dimulai atau saat view 'list' dibuka
   useEffect(() => {
-    localStorage.setItem('e_minutasi_cases', JSON.stringify(cases));
-  }, [cases]);
+    if (isLoggedIn) {
+      fetchCases();
+    }
+  }, [isLoggedIn, view]);
+
+  const fetchCases = async () => {
+    const data = await getAllCases();
+    setCases(data);
+  };
 
   const triggerToast = (message: string) => {
     setShowToast({ show: true, message });
@@ -64,6 +73,7 @@ const App: React.FC = () => {
     triggerToast("Berhasil Logout");
   };
 
+  // Pencarian Menggunakan Firestore
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!params.caseNumber) return;
@@ -73,66 +83,74 @@ const App: React.FC = () => {
     setActiveCase(null);
     setView('search');
     
-    // Simulasi loading pencarian
-    setTimeout(() => {
-      try {
-        const formattedCaseNum = params.caseNumber.includes('/') 
-          ? params.caseNumber 
-          : `${params.caseNumber}/${params.caseType === CaseType.GUGATAN ? 'Pdt.G' : 'Pdt.P'}/${params.year}/PA.Pbm`;
-        
-        const found = cases.find(c => c.caseNumber.toLowerCase() === formattedCaseNum.toLowerCase());
-        
-        if (found) {
-          setActiveCase(found);
-        } else {
-          setError(`Perkara nomor ${formattedCaseNum} tidak ditemukan.`);
-        }
-      } catch (err) {
-        setError("Terjadi kesalahan saat mencari data.");
-      } finally {
-        setLoading(false);
-      }
-    }, 600);
-  };
-
-  const handleSaveOrUpdateCase = (finalCase: CaseData) => {
-    const isUpdate = cases.some(c => c.id === finalCase.id);
-    
-    setCases(prev => {
-      if (isUpdate) {
-        return prev.map(c => c.id === finalCase.id ? finalCase : c);
+    try {
+      const formattedCaseNum = params.caseNumber.includes('/') 
+        ? params.caseNumber 
+        : `${params.caseNumber}/${params.caseType === CaseType.GUGATAN ? 'Pdt.G' : 'Pdt.P'}/${params.year}/PA.Pbm`;
+      
+      const found = await findCaseByNumber(formattedCaseNum);
+      
+      if (found) {
+        setActiveCase(found);
       } else {
-        return [finalCase, ...prev];
+        setError(`Perkara nomor ${formattedCaseNum} tidak ditemukan di database.`);
       }
-    });
-    
-    if (activeCase?.id === finalCase.id) {
-      setActiveCase(finalCase);
+    } catch (err) {
+      setError("Terjadi kesalahan saat mencari data di cloud.");
+    } finally {
+      setLoading(false);
     }
-
-    triggerToast(isUpdate ? "Data Diperbarui" : "Data Berhasil Disimpan");
-    setView('list');
-    setActiveCase(null);
   };
 
-  const handleDeleteCase = (id: string) => {
-    setCases(prev => prev.filter(c => c.id !== id));
-    if (activeCase?.id === id) setActiveCase(null);
-    triggerToast("Data Berhasil Dihapus");
-    setView('list');
+  // Simpan atau Update ke Firestore
+  const handleSaveOrUpdateCase = async (finalCase: CaseData) => {
+    setLoading(true);
+    try {
+      const isUpdate = !!finalCase.id && cases.some(c => c.id === finalCase.id);
+      
+      if (isUpdate) {
+        await updateCaseInFirestore(finalCase.id, finalCase);
+      } else {
+        // Hilangkan ID sementara jika ada agar Firestore generate ID baru
+        const { id, ...dataToSave } = finalCase;
+        await saveCaseToFirestore(dataToSave);
+      }
+
+      await fetchCases(); // Refresh data
+      triggerToast(isUpdate ? "Data Diperbarui ke Cloud" : "Data Tersimpan di Cloud");
+      setView('list');
+      setActiveCase(null);
+    } catch (err) {
+      triggerToast("Gagal menyimpan data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Hapus dari Firestore
+  const handleDeleteCase = async (id: string) => {
+    if (!window.confirm("Yakin ingin menghapus data ini dari cloud?")) return;
+    
+    try {
+      await deleteCaseFromFirestore(id);
+      setCases(prev => prev.filter(c => c.id !== id));
+      if (activeCase?.id === id) setActiveCase(null);
+      triggerToast("Data Berhasil Dihapus");
+      setView('list');
+    } catch (err) {
+      triggerToast("Gagal menghapus data");
+    }
   };
 
   const handleScanSuccess = (result: string) => {
     setParams(prev => ({ ...prev, caseNumber: result }));
     setShowScanner(false);
-    // Jalankan pencarian otomatis setelah scan
     setTimeout(() => handleSearch(), 200);
   };
 
   return (
     <Router>
       <div className="min-h-screen pb-20 bg-slate-50">
-        {/* Toast Notifikasi */}
         {showToast.show && (
           <div className="fixed top-24 right-4 z-[100] animate-in slide-in-from-right-10">
             <div className="bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3">
@@ -145,7 +163,6 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* Header Navigation */}
         <header className="bg-slate-900 text-white py-4 shadow-xl sticky top-0 z-40">
           <div className="max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => {setView('search'); setActiveCase(null);}}>
@@ -170,13 +187,13 @@ const App: React.FC = () => {
                 <>
                   <button 
                     onClick={() => setView('list')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${view === 'list' ? 'bg-slate-600' : 'text-slate-400'}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${view === 'list' ? 'bg-slate-600 text-white' : 'text-slate-400'}`}
                   >
                     <ListFilter className="w-4 h-4" /> Berkas
                   </button>
                   <button 
                     onClick={() => {setView('add'); setActiveCase(null);}}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${view === 'add' ? 'bg-emerald-600' : 'text-slate-400'}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${view === 'add' ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}
                   >
                     <PlusCircle className="w-4 h-4" /> Input
                   </button>
@@ -211,7 +228,6 @@ const App: React.FC = () => {
             />
           ) : (
             <>
-              {/* Search Card */}
               <section className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden mb-8">
                 <div className="p-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
                 <div className="p-8">
