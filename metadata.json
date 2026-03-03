@@ -1,0 +1,7 @@
+{
+  "name": "SI CANTIK: Manajemen Arsip Perkara",
+  "description": "Aplikasi pelacakan status minutasi dan lokasi fisik berkas perkara pengadilan dengan fitur scan QR dan manajemen dokumen digital.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
