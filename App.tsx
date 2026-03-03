@@ -1,10 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router } from 'react-router-dom';
 import { 
   Search, QrCode, FileSearch, Scale, AlertCircle, Loader2, 
   PlusCircle, LayoutDashboard, ListFilter, CheckCircle2, X, LogOut, LogIn 
 } from 'lucide-react';
+
+// Inisialisasi Firebase agar Analytics berjalan
+import './services/firebase'; 
+
 import { CaseData, CaseType, SearchParams } from './types';
 import { MOCK_CASES } from './constants';
 import CaseDetails from './components/CaseDetails';
@@ -42,7 +45,6 @@ const App: React.FC = () => {
     localStorage.setItem('e_minutasi_cases', JSON.stringify(cases));
   }, [cases]);
 
-  // Handler Notifikasi
   const triggerToast = (message: string) => {
     setShowToast({ show: true, message });
     setTimeout(() => setShowToast({ show: false, message: '' }), 3000);
@@ -71,6 +73,7 @@ const App: React.FC = () => {
     setActiveCase(null);
     setView('search');
     
+    // Simulasi loading pencarian
     setTimeout(() => {
       try {
         const formattedCaseNum = params.caseNumber.includes('/') 
@@ -82,14 +85,14 @@ const App: React.FC = () => {
         if (found) {
           setActiveCase(found);
         } else {
-          setError(`Perkara nomor ${formattedCaseNum} tidak ditemukan. Pastikan data sudah diinput di menu "Berkas Terinput".`);
+          setError(`Perkara nomor ${formattedCaseNum} tidak ditemukan.`);
         }
       } catch (err) {
         setError("Terjadi kesalahan saat mencari data.");
       } finally {
         setLoading(false);
       }
-    }, 400);
+    }, 600);
   };
 
   const handleSaveOrUpdateCase = (finalCase: CaseData) => {
@@ -99,7 +102,7 @@ const App: React.FC = () => {
       if (isUpdate) {
         return prev.map(c => c.id === finalCase.id ? finalCase : c);
       } else {
-        return [finalCase, ...prev]; // Tambahkan di paling atas
+        return [finalCase, ...prev];
       }
     });
     
@@ -107,105 +110,84 @@ const App: React.FC = () => {
       setActiveCase(finalCase);
     }
 
-    triggerToast(isUpdate ? "Data Berhasil Diperbarui" : "Data Berhasil Tersimpan di Berkas Terinput");
+    triggerToast(isUpdate ? "Data Diperbarui" : "Data Berhasil Disimpan");
     setView('list');
     setActiveCase(null);
   };
 
   const handleDeleteCase = (id: string) => {
     setCases(prev => prev.filter(c => c.id !== id));
-    if (activeCase?.id === id) {
-      setActiveCase(null);
-    }
+    if (activeCase?.id === id) setActiveCase(null);
     triggerToast("Data Berhasil Dihapus");
     setView('list');
   };
 
   const handleScanSuccess = (result: string) => {
     setParams(prev => ({ ...prev, caseNumber: result }));
-    setTimeout(() => handleSearch(), 100);
-  };
-
-  const selectCaseForEdit = (caseData: CaseData) => {
-    setActiveCase(caseData);
-    setView('add');
+    setShowScanner(false);
+    // Jalankan pencarian otomatis setelah scan
+    setTimeout(() => handleSearch(), 200);
   };
 
   return (
     <Router>
-      <div className="min-h-screen pb-20 bg-slate-50 animate-in fade-in duration-700">
-        {/* Success Toast */}
+      <div className="min-h-screen pb-20 bg-slate-50">
+        {/* Toast Notifikasi */}
         {showToast.show && (
-          <div className="fixed top-24 right-4 z-[100] animate-in slide-in-from-right-10 duration-300">
-            <div className="bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500">
+          <div className="fixed top-24 right-4 z-[100] animate-in slide-in-from-right-10">
+            <div className="bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3">
               <CheckCircle2 className="w-6 h-6" />
               <span className="font-bold text-sm">{showToast.message}</span>
-              <button onClick={() => setShowToast({show: false, message: ''})} className="ml-2 hover:bg-emerald-500 rounded-full p-1">
+              <button onClick={() => setShowToast({show: false, message: ''})} className="ml-2">
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
         )}
 
-        {/* Header */}
-        <header className="bg-slate-900 text-white py-4 shadow-xl sticky top-0 z-40 border-b border-white/5">
+        {/* Header Navigation */}
+        <header className="bg-slate-900 text-white py-4 shadow-xl sticky top-0 z-40">
           <div className="max-w-5xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-900/20">
+            <div className="flex items-center gap-3 cursor-pointer" onClick={() => {setView('search'); setActiveCase(null);}}>
+              <div className="bg-blue-600 p-2 rounded-xl">
                 <Scale className="w-8 h-8" />
               </div>
-              <div onClick={() => {setView('search'); setActiveCase(null); setError(null);}} className="cursor-pointer group">
-                <h1 className="text-xl font-bold leading-tight group-hover:text-blue-400 transition-colors uppercase tracking-tight">SI CANTIK</h1>
-                <p className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">PA PRABUMULIH KELAS II</p>
+              <div>
+                <h1 className="text-xl font-bold uppercase">SI CANTIK</h1>
+                <p className="text-slate-400 text-[10px] font-bold">PA PRABUMULIH KELAS II</p>
               </div>
             </div>
 
-            <nav className="flex items-center gap-2 bg-slate-800 p-1 rounded-xl overflow-x-auto no-scrollbar">
+            <nav className="flex items-center gap-2 bg-slate-800 p-1 rounded-xl">
               <button 
-                onClick={() => {setView('search'); setActiveCase(null); setError(null);}}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
-                  view === 'search' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                }`}
+                onClick={() => {setView('search'); setActiveCase(null);}}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${view === 'search' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}
               >
-                <LayoutDashboard className="w-4 h-4" />
-                Dashboard
+                <LayoutDashboard className="w-4 h-4" /> Dashboard
               </button>
               
-              {isLoggedIn ? (
+              {isLoggedIn && (
                 <>
                   <button 
-                    onClick={() => {setView('list'); setError(null);}}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
-                      view === 'list' ? 'bg-slate-600 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                    }`}
+                    onClick={() => setView('list')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${view === 'list' ? 'bg-slate-600' : 'text-slate-400'}`}
                   >
-                    <ListFilter className="w-4 h-4" />
-                    Berkas Terinput
+                    <ListFilter className="w-4 h-4" /> Berkas
                   </button>
                   <button 
-                    onClick={() => {setView('add'); setActiveCase(null); setError(null);}}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
-                      view === 'add' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-                    }`}
+                    onClick={() => {setView('add'); setActiveCase(null);}}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold ${view === 'add' ? 'bg-emerald-600' : 'text-slate-400'}`}
                   >
-                    <PlusCircle className="w-4 h-4" />
-                    Input Perkara
+                    <PlusCircle className="w-4 h-4" /> Input
                   </button>
-                  <button 
-                    onClick={handleLogout}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap text-red-400 hover:text-white hover:bg-red-600/20"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Logout
+                  <button onClick={handleLogout} className="text-red-400 px-4 py-2 font-bold text-sm hover:bg-red-500/10 rounded-lg">
+                    <LogOut className="w-4 h-4 inline mr-2" /> Logout
                   </button>
                 </>
-              ) : (
-                <button 
-                  onClick={() => setShowLoginModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap bg-slate-700 text-white hover:bg-slate-600"
-                >
-                  <LogIn className="w-4 h-4" />
-                  Admin Login
+              )}
+              {!isLoggedIn && (
+                <button onClick={() => setShowLoginModal(true)} className="bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold">
+                  <LogIn className="w-4 h-4 inline mr-2" /> Login
                 </button>
               )}
             </nav>
@@ -218,32 +200,28 @@ const App: React.FC = () => {
               initialData={activeCase}
               onSave={handleSaveOrUpdateCase} 
               onDelete={handleDeleteCase}
-              onCancel={() => {setView('list'); setActiveCase(null);}} 
+              onCancel={() => setView('list')} 
             />
           ) : view === 'list' && isLoggedIn ? (
             <CaseList 
               cases={cases} 
-              onSelectCase={selectCaseForEdit}
+              onSelectCase={(c) => {setActiveCase(c); setView('add');}}
               onDeleteCase={handleDeleteCase}
               onUpdateCase={handleSaveOrUpdateCase}
             />
           ) : (
             <>
-              {/* Search Card Section */}
-              <section className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden mb-8 transition-all hover:shadow-xl">
+              {/* Search Card */}
+              <section className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden mb-8">
                 <div className="p-1 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
                 <div className="p-8">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                     <div>
                       <h2 className="text-xl font-bold text-slate-800">Cari Berkas Perkara</h2>
-                      <p className="text-slate-500 text-sm">Informasi status dan lokasi fisik arsip terintegrasi melalui sistem SI CANTIK.</p>
+                      <p className="text-slate-500 text-sm">Sistem Informasi Catatan Arsip Terintegrasi (SI CANTIK).</p>
                     </div>
-                    <button 
-                      onClick={() => setShowScanner(true)}
-                      className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all active:scale-95 shadow-lg shadow-slate-200"
-                    >
-                      <QrCode className="w-5 h-5" />
-                      Scan QR Perkara
+                    <button onClick={() => setShowScanner(true)} className="flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-xl font-bold shadow-lg">
+                      <QrCode className="w-5 h-5" /> Scan QR
                     </button>
                   </div>
 
@@ -257,44 +235,38 @@ const App: React.FC = () => {
                           placeholder="Contoh: 123"
                           value={params.caseNumber}
                           onChange={e => setParams({...params, caseNumber: e.target.value})}
-                          className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-800 font-medium"
+                          className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     </div>
-                    
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Jenis</label>
                       <select 
                         value={params.caseType}
                         onChange={e => setParams({...params, caseType: e.target.value as CaseType})}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-800 font-medium appearance-none"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                       >
                         <option value={CaseType.GUGATAN}>Gugatan</option>
                         <option value={CaseType.PERMOHONAN}>Permohonan</option>
                       </select>
                     </div>
-
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tahun</label>
                       <input 
                         type="number" 
                         value={params.year}
                         onChange={e => setParams({...params, year: e.target.value})}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-800 font-medium"
+                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                       />
                     </div>
-
                     <div className="md:col-span-4 mt-2">
                       <button 
                         type="submit"
                         disabled={loading || !params.caseNumber}
-                        className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 shadow-xl shadow-blue-100"
+                        className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
                       >
-                        {loading ? (
-                          <><Loader2 className="w-5 h-5 animate-spin" /> Sedang Mencari...</>
-                        ) : (
-                          <><FileSearch className="w-5 h-5" /> Cari Data Perkara</>
-                        )}
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileSearch className="w-5 h-5" />}
+                        Cari Data Perkara
                       </button>
                     </div>
                   </form>
@@ -302,51 +274,30 @@ const App: React.FC = () => {
               </section>
 
               {error && (
-                <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl flex items-start gap-4 text-amber-800 mb-8 animate-in fade-in slide-in-from-top-2 shadow-sm">
-                  <div className="bg-amber-100 p-2 rounded-lg">
-                    <AlertCircle className="w-6 h-6 shrink-0" />
-                  </div>
+                <div className="bg-amber-50 border border-amber-200 p-6 rounded-2xl flex items-start gap-4 text-amber-800 mb-8">
+                  <AlertCircle className="w-6 h-6 shrink-0" />
                   <div>
-                    <h4 className="font-bold text-lg">Tidak Ditemukan</h4>
-                    <p className="font-medium opacity-90">{error}</p>
+                    <h4 className="font-bold">Tidak Ditemukan</h4>
+                    <p className="text-sm">{error}</p>
                   </div>
                 </div>
               )}
 
               {activeCase ? (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <CaseDetails data={activeCase} />
-                </div>
+                <CaseDetails data={activeCase} />
               ) : !loading && !error && (
-                <div className="text-center py-20 px-4 bg-white rounded-3xl border border-slate-200 shadow-sm">
-                  <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Search className="w-10 h-10 text-slate-300" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-800 mb-2">SI CANTIK Digital System</h3>
-                  <p className="text-slate-500 max-w-sm mx-auto">Silakan cari nomor perkara untuk melihat status minutasi dan lokasi fisik berkas di ruang arsip melalui Sistem Informasi Catatan Arsip.</p>
+                <div className="text-center py-20 bg-white rounded-3xl border border-slate-200">
+                  <Search className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                  <h3 className="text-lg font-bold text-slate-800">Sistem Digital PA Prabumulih</h3>
+                  <p className="text-slate-500 text-sm max-w-xs mx-auto">Input nomor perkara untuk melacak lokasi fisik berkas arsip.</p>
                 </div>
               )}
             </>
           )}
         </main>
 
-        {showScanner && (
-          <Scanner onScan={handleScanSuccess} onClose={() => setShowScanner(false)} />
-        )}
-
-        {showLoginModal && (
-          <LoginModal 
-            onSuccess={handleLoginSuccess} 
-            onClose={() => setShowLoginModal(false)} 
-          />
-        )}
-
-        <footer className="mt-12 py-12 border-t border-slate-200 bg-white">
-          <div className="max-w-5xl mx-auto px-4 text-center">
-            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">SI CANTIK - Sistem Informasi Arsip Digital &copy; 2024</p>
-            <p className="text-slate-500 text-sm mt-2 font-medium">Pengadilan Agama Prabumulih Kelas II</p>
-          </div>
-        </footer>
+        {showScanner && <Scanner onScan={handleScanSuccess} onClose={() => setShowScanner(false)} />}
+        {showLoginModal && <LoginModal onSuccess={handleLoginSuccess} onClose={() => setShowLoginModal(false)} />}
       </div>
     </Router>
   );
