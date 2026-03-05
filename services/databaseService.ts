@@ -17,10 +17,14 @@ const COLLECTION_NAME = "cases";
 // 1. Simpan Data Perkara Baru
 export const saveCaseToFirestore = async (caseData: Omit<CaseData, 'id'>) => {
   try {
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
+    // Memastikan bhtDate dan field lainnya tidak bernilai 'undefined'
+    const cleanData = {
       ...caseData,
+      bhtDate: caseData.bhtDate || null, // Jika undefined, diubah jadi null agar diterima Firestore
       createdAt: new Date().toISOString()
-    });
+    };
+
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanData);
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error("Error adding document: ", error);
@@ -67,7 +71,14 @@ export const findCaseByNumber = async (caseNumber: string): Promise<CaseData | n
 export const updateCaseInFirestore = async (id: string, updatedData: Partial<CaseData>) => {
   try {
     const docRef = doc(db, COLLECTION_NAME, id);
-    await updateDoc(docRef, updatedData);
+    
+    // Proteksi agar update juga tidak mengirim undefined
+    const cleanUpdate = { ...updatedData };
+    if (cleanUpdate.bhtDate === undefined) {
+      cleanUpdate.bhtDate = null;
+    }
+
+    await updateDoc(docRef, cleanUpdate);
     return { success: true };
   } catch (error) {
     console.error("Error updating document: ", error);
